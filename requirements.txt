@@ -1,3 +1,2 @@
-timetree-exporter>=0.8.0
-icalendar>=5.0
-tzdata
+. # install the package (pip install -e .) instead:
+#   pip install -e ".[dev]"   (dev adds pytest)

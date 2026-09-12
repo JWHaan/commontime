@@ -1,0 +1,12 @@
+LICENSE
+README.md
+mcp_server.py
+pyproject.toml
+timetree_slots.py
+tests/test_slots.py
+timetree_availability_agent.egg-info/PKG-INFO
+timetree_availability_agent.egg-info/SOURCES.txt
+timetree_availability_agent.egg-info/dependency_links.txt
+timetree_availability_agent.egg-info/entry_points.txt
+timetree_availability_agent.egg-info/requires.txt
+timetree_availability_agent.egg-info/top_level.txt

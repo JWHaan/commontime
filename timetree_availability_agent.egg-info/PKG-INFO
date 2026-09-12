@@ -1,3 +1,19 @@
+Metadata-Version: 2.4
+Name: timetree-availability-agent
+Version: 0.1.0
+Summary: Find shared meeting slots on a TimeTree calendar — via CLI or MCP, for humans and agents.
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: timetree-exporter>=0.8.0
+Requires-Dist: icalendar>=5.0
+Requires-Dist: tzdata
+Requires-Dist: mcp>=1.0
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Dynamic: license-file
+
 # TimeTree Availability Agent
 
 Find shared meeting slots on a TimeTree calendar — built for both humans and AI agents.

@@ -1,0 +1,3 @@
+[console_scripts]
+timetree-availability = timetree_slots:main
+timetree-availability-mcp = mcp_server:main

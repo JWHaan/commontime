@@ -1,0 +1,7 @@
+timetree-exporter>=0.8.0
+icalendar>=5.0
+tzdata
+mcp>=1.0
+
+[dev]
+pytest
