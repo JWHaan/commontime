@@ -1,4 +1,4 @@
-"""Unit tests for timetree_slots (synthetic ICS, no network or credentials)."""
+"""Unit tests for commontime (synthetic ICS, no network or credentials)."""
 import json
 import subprocess
 import sys
@@ -10,10 +10,10 @@ from zoneinfo import ZoneInfo
 import pytest
 from icalendar import Calendar, Event
 
-from timetree_slots import find_slots, load_busy
+from commontime import find_slots, load_busy
 
 SGT = ZoneInfo("Asia/Singapore")
-SCRIPT = Path(__file__).resolve().parent.parent / "timetree_slots.py"
+SCRIPT = Path(__file__).resolve().parent.parent / "commontime.py"
 DAYS = [ddate(2026, 9, 14 + i) for i in range(5)]  # Mon-Fri
 
 

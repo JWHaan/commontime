@@ -1,23 +1,23 @@
-# TimeTree Availability Agent
+# CommonTime
 
-Find shared meeting slots on a TimeTree calendar — built for both humans and AI agents.
+Find the time everyone is free — shared meeting slots from a TimeTree calendar, for humans and AI agents.
 
 Defaults: weekdays Mon–Fri, hard window 08:00–20:00, Asia/Singapore. A time counts as
 free only if **no event** overlaps it. Three ways to use it: CLI, MCP server, or scheduled digest.
 
-> TimeTree shut down its official API in December 2023. This project exports via the
+> TimeTree shut down its official API in December 2023. CommonTime exports via the
 > community [`timetree-exporter`](https://github.com/eoleedi/TimeTree-Exporter)
 > (unofficial web API) and computes free windows locally.
 
 ## Quickstart
 
 ```bash
-pip install timetree-availability-agent   # or: pip install -e ".[dev]" from source
+pip install commontime   # or: pip install -e ".[dev]" from source
 cp .env.example .env   # fill in — never commit .env
 set -a; source .env; set +a
 
-timetree-availability                     # next Mon–Fri, 2h slots, 8am–8pm
-timetree-availability --week-start 2026-09-14 --json
+commontime                     # next Mon–Fri, 2h slots, 8am–8pm
+commontime --week-start 2026-09-14 --json
 ```
 
 Example output:
@@ -41,8 +41,8 @@ Any MCP-compatible agent (Claude, Hermes, …) gets two tools over stdio:
 Client config:
 
 ```json
-{ "mcpServers": { "timetree-availability": {
-    "command": "timetree-availability-mcp",
+{ "mcpServers": { "commontime": {
+    "command": "commontime-mcp",
     "env": {
       "TIMETREE_EMAIL": "you@example.com",
       "TIMETREE_PASSWORD": "secret",
@@ -70,7 +70,7 @@ CLI flags: `--week-start YYYY-MM-DD` (a Monday), `--duration`, `--step`,
 Run it on a schedule and have the result messaged to you — e.g. cron:
 
 ```cron
-0 21 * * SUN TIMETREE_EMAIL=... TIMETREE_PASSWORD=... TIMETREE_CALENDAR_CODE=... timetree-availability
+0 21 * * SUN TIMETREE_EMAIL=... TIMETREE_PASSWORD=... TIMETREE_CALENDAR_CODE=... commontime
 ```
 
 ## Limits

@@ -2,8 +2,8 @@
 
 Transport: stdio. Configure your MCP client with:
 
-    { "mcpServers": { "timetree-availability": {
-        "command": "timetree-availability-mcp",
+    { "mcpServers": { "commontime": {
+        "command": "commontime-mcp",
         "env": {
           "TIMETREE_EMAIL": "you@example.com",
           "TIMETREE_PASSWORD": "secret",
@@ -24,9 +24,9 @@ from zoneinfo import ZoneInfo
 
 from mcp.server.fastmcp import FastMCP
 
-from timetree_slots import export_ics, find_slots, load_busy, resolve_week
+from commontime import export_ics, find_slots, load_busy, resolve_week
 
-mcp = FastMCP("timetree-availability")
+mcp = FastMCP("commontime")
 
 
 def _parse_hhmm(value: str):

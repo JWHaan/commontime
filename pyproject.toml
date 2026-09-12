@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "timetree-availability-agent"
+name = "commontime"
 version = "0.1.0"
-description = "Find shared meeting slots on a TimeTree calendar — via CLI or MCP, for humans and agents."
+description = "Find the time everyone is free — shared meeting slots from a TimeTree calendar, via CLI or MCP."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -20,8 +20,8 @@ dependencies = [
 dev = ["pytest"]
 
 [project.scripts]
-timetree-availability = "timetree_slots:main"
-timetree-availability-mcp = "mcp_server:main"
+commontime = "commontime:main"
+commontime-mcp = "commontime_mcp:main"
 
 [tool.setuptools]
-py-modules = ["timetree_slots", "mcp_server"]
+py-modules = ["commontime", "commontime_mcp"]

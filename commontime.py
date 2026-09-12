@@ -7,10 +7,10 @@ Usage:
     export TIMETREE_EMAIL=you@example.com
     export TIMETREE_PASSWORD=secret
     export TIMETREE_CALENDAR_CODE=xxxxxx
-    python timetree_slots.py [--week-start YYYY-MM-DD] [--json]
+    python commontime.py [--week-start YYYY-MM-DD] [--json]
 
 Or reuse an exported file without logging in:
-    python timetree_slots.py --ics path/to/calendar.ics
+    python commontime.py --ics path/to/calendar.ics
 """
 
 from __future__ import annotations

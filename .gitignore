@@ -1,3 +1,4 @@
 .env
 *.ics
 __pycache__/
+*.egg-info/
