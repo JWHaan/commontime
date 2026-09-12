@@ -1,23 +1,25 @@
 # CommonTime
 
-Find the time everyone is free — shared meeting slots from a TimeTree calendar, for humans and AI agents.
+Find the time everyone is free — shared meeting slots from TimeTree or Google Calendar, for humans and AI agents.
 
-Defaults: weekdays Mon–Fri, hard window 08:00–20:00, Asia/Singapore. A time counts as
-free only if **no event** overlaps it. Three ways to use it: CLI, MCP server, or scheduled digest.
+One engine, two providers: give it member calendars and a meeting length, get back the
+windows free on **every** calendar. Defaults: weekdays Mon–Fri, hard window 08:00–20:00,
+Asia/Singapore. Any duration, any week.
 
 > TimeTree shut down its official API in December 2023. CommonTime exports via the
 > community [`timetree-exporter`](https://github.com/eoleedi/TimeTree-Exporter)
-> (unofficial web API) and computes free windows locally.
+> (unofficial web API). Google uses the official Calendar API (`freebusy`).
 
 ## Quickstart
 
 ```bash
-pip install commontime   # or: pip install -e ".[dev]" from source
+pip install "commontime[google]"   # or: pip install -e ".[dev,google]" from source
 cp .env.example .env   # fill in — never commit .env
 set -a; source .env; set +a
 
-commontime                     # next Mon–Fri, 2h slots, 8am–8pm
-commontime --week-start 2026-09-14 --json
+commontime --source timetree --calendar 7X9fYzh41yRx
+commontime --source google --calendar alice@example.com --calendar bob@example.com --duration 60
+commontime --source google --calendar primary --week-start 2026-09-14 --json
 ```
 
 Example output:
@@ -35,8 +37,17 @@ Any MCP-compatible agent (Claude, Hermes, …) gets two tools over stdio:
 
 | Tool | What |
 |---|---|
-| `find_free_slots` | Free meeting windows for a week (same defaults/flags as the CLI) |
-| `list_calendars` | Discover calendar names + codes for the login |
+| `find_free_slots` | Free meeting windows for a week; `source` = `timetree`/`google`, `calendars` = member list |
+| `list_calendars` | Discover calendar names + ids/codes for the login (`source` param) |
+
+## Google setup
+
+1. `pip install "commontime[google]"`
+2. In [Google Cloud Console](https://console.cloud.google.com): enable the Calendar API,
+   create an **OAuth desktop client**, download its JSON.
+3. `export GOOGLE_CLIENT_SECRETS=/path/to/client.json`
+   (optionally `GOOGLE_CALENDARS=alice@…,bob@…`, `GOOGLE_TOKEN_FILE=…`).
+4. First run opens a browser for consent; the token is cached, so scheduled runs work headless.
 
 Client config:
 
@@ -61,8 +72,9 @@ Client config:
 Public calendars need no login: use the id from the share URL with `--public-calendar`
 (or `public_calendar: true` on the MCP tool).
 
-CLI flags: `--week-start YYYY-MM-DD` (a Monday), `--duration`, `--step`,
-`--timezone`, `--day-start/--day-end`, `--ics` (reuse an exported file, no login),
+CLI flags: `--source timetree|google`, `--calendar` (repeatable, one per member),
+`--week-start YYYY-MM-DD` (a Monday, any week), `--duration` (any length),
+`--step`, `--timezone`, `--day-start/--day-end`, `--ics` (cached TimeTree export, no login),
 `--json`.
 
 ## Weekly digest

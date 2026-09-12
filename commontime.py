@@ -1,16 +1,12 @@
-"""Find 2-hour meeting slots free on a TimeTree calendar.
+"""Find shared meeting slots on any supported calendar (TimeTree, Google).
 
-Weekdays Mon-Fri, hard window 08:00-20:00 (default Asia/Singapore).
-Free = no overlapping event on the calendar.
+Weekdays Mon-Fri, hard day window 08:00-20:00 (default Asia/Singapore).
+Give one or more member calendars: a slot is free only if free on ALL of them.
 
 Usage:
-    export TIMETREE_EMAIL=you@example.com
-    export TIMETREE_PASSWORD=secret
-    export TIMETREE_CALENDAR_CODE=xxxxxx
-    python commontime.py [--week-start YYYY-MM-DD] [--json]
-
-Or reuse an exported file without logging in:
-    python commontime.py --ics path/to/calendar.ics
+    commontime --source timetree --calendar 7X9fYzh41yRx
+    commontime --source google --calendar alice@example.com --calendar bob@example.com
+    commontime --source google --calendar primary --duration 60 --week-start 2026-09-14
 """
 
 from __future__ import annotations
@@ -38,7 +34,14 @@ STEP_MINUTES = 30
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Find 2-hour free slots on a TimeTree calendar (Mon-Fri, 8am-8pm).")
+    p = argparse.ArgumentParser(description="Find shared meeting slots (Mon-Fri, hard day window).")
+    p.add_argument("--source", default=os.environ.get("COMMONTIME_SOURCE", "timetree"),
+                   choices=["timetree", "google"],
+                   help="Calendar platform (default: timetree).")
+    p.add_argument("--calendar", action="append", default=None, dest="calendars",
+                   help="Member calendar: TimeTree code or Google calendar id/email. "
+                        "Repeat for each member; free = free on ALL. "
+                        "Defaults: TIMETREE_CALENDAR_CODE, or GOOGLE_CALENDARS (comma-separated).")
     p.add_argument("--week-start", default=None,
                    help="Monday of the week to check (YYYY-MM-DD). Default: next Monday in --timezone.")
     p.add_argument("--timezone", default=os.environ.get("SLOT_TIMEZONE", "Asia/Singapore"))
@@ -48,10 +51,14 @@ def parse_args() -> argparse.Namespace:
                    help="Meeting length in minutes (default 120).")
     p.add_argument("--step", type=int, default=30, help="Candidate start granularity in minutes (default 30).")
     p.add_argument("--calendar-code", default=os.environ.get("TIMETREE_CALENDAR_CODE"),
-                   help="TimeTree calendar alias code (or -c value).")
+                   help="Deprecated alias for --calendar (TimeTree).")
     p.add_argument("--public-calendar", action="store_true",
-                   help="Treat --calendar-code as a public calendar id (no login).")
-    p.add_argument("--ics", default=None, help="Use an existing .ics file instead of exporting.")
+                   help="Treat the TimeTree calendar as a public id (no login).")
+    p.add_argument("--client-secrets", default=os.environ.get("GOOGLE_CLIENT_SECRETS"),
+                   help="Google OAuth desktop-client JSON (first run only; token is cached).")
+    p.add_argument("--token-file", default=os.environ.get("GOOGLE_TOKEN_FILE"),
+                   help="Google token cache path.")
+    p.add_argument("--ics", default=None, help="Use an existing .ics file instead of fetching (TimeTree shape).")
     p.add_argument("--json", action="store_true", dest="as_json", help="Output JSON.")
     return p.parse_args()
 
@@ -109,6 +116,31 @@ def _as_tz(dt, tz: ZoneInfo) -> datetime:
     raise TypeError
 
 
+def clip_range_to_days(ss: datetime, ee: datetime, days: list[date], day_set: set[date],
+                       tz: ZoneInfo, day_start: time, day_end: time,
+                       busy: dict[date, list[tuple[datetime, datetime]]]) -> None:
+    """Clip a [start, end) range into per-day windowed busy intervals (multi-day aware)."""
+    cur = ss.date()
+    while cur <= ee.date():
+        if cur in day_set:
+            w0 = datetime.combine(cur, day_start, tz)
+            w1 = datetime.combine(cur, day_end, tz)
+            b0, b1 = max(ss, w0), min(ee, w1)
+            if b0 < b1:
+                busy[cur].append((b0, b1))
+        cur += timedelta(days=1)
+
+
+def merge_intervals(blocks: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    merged: list[list[datetime]] = []
+    for b0, b1 in sorted(blocks):
+        if merged and b0 <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b1)
+        else:
+            merged.append([b0, b1])
+    return [(a, b) for a, b in merged]
+
+
 def load_busy(ics_path: str, tz: ZoneInfo, days: list[date],
               day_start: time, day_end: time) -> dict[date, list[tuple[datetime, datetime]]]:
     with open(ics_path, "rb") as f:
@@ -121,17 +153,8 @@ def load_busy(ics_path: str, tz: ZoneInfo, days: list[date],
         s = comp.get("dtstart").dt
         e = comp.get("dtend").dt if comp.get("dtend") else s
         if isinstance(s, datetime) and isinstance(e, datetime):
-            ss, ee = _as_tz(s, tz), _as_tz(e, tz)
-            cur = ss.date()
-            # split multi-day events per day, clipped to window
-            while cur <= ee.date():
-                if cur in day_set:
-                    w0 = datetime.combine(cur, day_start, tz)
-                    w1 = datetime.combine(cur, day_end, tz)
-                    b0, b1 = max(ss, w0), min(ee, w1)
-                    if b0 < b1:
-                        busy[cur].append((b0, b1))
-                cur += timedelta(days=1)
+            clip_range_to_days(_as_tz(s, tz), _as_tz(e, tz), days, day_set,
+                               tz, day_start, day_end, busy)
         else:  # all-day DATE (or date-like): blocks whole window that day
             cur = s if isinstance(s, date) else None
             end = e if isinstance(e, date) else cur
@@ -144,14 +167,7 @@ def load_busy(ics_path: str, tz: ZoneInfo, days: list[date],
                                     datetime.combine(d, day_end, tz)))
                 d += timedelta(days=1)
     for d in busy:
-        busy[d].sort()
-        merged: list[list[datetime]] = []
-        for b0, b1 in busy[d]:
-            if merged and b0 <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], b1)
-            else:
-                merged.append([b0, b1])
-        busy[d] = [(a, b) for a, b in merged]
+        busy[d] = merge_intervals(busy[d])
     return busy
 
 
@@ -175,6 +191,19 @@ def find_slots(days: list[date], busy: dict[date, list[tuple[datetime, datetime]
     return out
 
 
+def resolve_calendars(args: argparse.Namespace) -> list[str]:
+    """Member calendars from --calendar (repeatable), legacy --calendar-code, or env."""
+    if args.calendars:
+        return args.calendars
+    if args.source == "google":
+        env = os.environ.get("GOOGLE_CALENDARS", "")
+        cals = [c.strip() for c in env.split(",") if c.strip()]
+        return cals or ["primary"]
+    if args.calendar_code:
+        return [args.calendar_code]
+    return []
+
+
 def main() -> int:
     args = parse_args()
     tz = ZoneInfo(args.timezone)
@@ -182,33 +211,41 @@ def main() -> int:
     day_end = time(*map(int, args.day_end.split(":")))
     days = resolve_week(args.week_start, tz)
 
-    ics_path = args.ics
+    calendars = resolve_calendars(args)
+    busy: dict[date, list[tuple[datetime, datetime]]]
     tmp = None
-    if not ics_path:
-        if not args.calendar_code:
-            print("Set TIMETREE_CALENDAR_CODE or pass --calendar-code / --ics.", file=sys.stderr)
+    if args.ics:
+        busy = load_busy(args.ics, tz, days, day_start, day_end)
+    elif args.source == "google":
+        from providers import google_busy
+        busy = google_busy(calendars, days, tz, day_start, day_end,
+                           client_secrets=args.client_secrets, token_file=args.token_file)
+    else:
+        if not calendars:
+            print("Set TIMETREE_CALENDAR_CODE or pass --calendar / --ics.", file=sys.stderr)
             return 2
         tmp = tempfile.NamedTemporaryFile(suffix=".ics", delete=False)
         tmp.close()
-        export_ics(args.calendar_code, tmp.name, public=args.public_calendar)
-        ics_path = tmp.name
-    try:
-        busy = load_busy(ics_path, tz, days, day_start, day_end)
-        slots = find_slots(days, busy, tz, day_start, day_end, args.duration, args.step)
-    finally:
-        if tmp:
+        export_ics(calendars[0], tmp.name, public=args.public_calendar)
+        try:
+            busy = load_busy(tmp.name, tz, days, day_start, day_end)
+        finally:
             Path(tmp.name).unlink(missing_ok=True)
+    slots = find_slots(days, busy, tz, day_start, day_end, args.duration, args.step)
 
     if args.as_json:
-        print(json.dumps({"week": [d.isoformat() for d in days], "timezone": args.timezone,
-                          "slots": slots}, indent=2))
+        print(json.dumps({"source": args.source, "calendars": calendars,
+                          "week": [d.isoformat() for d in days], "timezone": args.timezone,
+                          "window": f"{args.day_start}-{args.day_end}",
+                          "duration_min": args.duration, "slots": slots}, indent=2))
     else:
+        who = f" [{', '.join(calendars)}]" if calendars else ""
         print(f"Week of {days[0]} - {days[-1]} ({args.timezone}, "
-              f"{args.day_start}-{args.day_end}, {args.duration}min)")
+              f"{args.day_start}-{args.day_end}, {args.duration}min){who}")
         for d in days:
             opts = slots[d.isoformat()]
             label = d.strftime("%a %Y-%m-%d")
-            print(f"{label}: " + (", ".join(opts) if opts else "no 2h slot"))
+            print(f"{label}: " + (", ".join(opts) if opts else f"no {args.duration}min slot"))
     return 0
 
 

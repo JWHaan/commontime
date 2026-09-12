@@ -18,10 +18,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+google = ["google-api-python-client", "google-auth-oauthlib"]
 
 [project.scripts]
 commontime = "commontime:main"
 commontime-mcp = "commontime_mcp:main"
 
 [tool.setuptools]
-py-modules = ["commontime", "commontime_mcp"]
+py-modules = ["commontime", "commontime_mcp", "providers"]

@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 from mcp.server.fastmcp import FastMCP
 
-from commontime import export_ics, find_slots, load_busy, resolve_week
+from commontime import find_slots, resolve_week
 
 mcp = FastMCP("commontime")
 
@@ -43,42 +43,69 @@ def find_free_slots(
     day_end: str = "20:00",
     timezone: str = "Asia/Singapore",
     step_min: int = 30,
+    source: str = "timetree",
+    calendars: list[str] | None = None,
     calendar_code: str | None = None,
     public_calendar: bool = False,
 ) -> dict:
-    """Find free meeting slots on the TimeTree calendar (Mon-Fri, hard day window).
+    """Find meeting slots free on ALL member calendars (Mon-Fri, hard day window).
 
     Args:
         week_start: Monday of the week to check (YYYY-MM-DD). Default: next Monday.
-        duration_min: Meeting length in minutes.
+        duration_min: Meeting length in minutes — any length the user wants.
         day_start/day_end: Hard daily window (HH:MM). Slots never fall outside it.
         timezone: IANA timezone for days and output.
         step_min: Candidate start granularity in minutes.
-        calendar_code: TimeTree calendar code (default: TIMETREE_CALENDAR_CODE env).
-        public_calendar: Set true to use a public calendar id without login.
+        source: 'timetree' or 'google'.
+        calendars: Member calendars (TimeTree codes or Google ids/emails).
+            Defaults: TIMETREE_CALENDAR_CODE, or GOOGLE_CALENDARS env.
+        calendar_code: Deprecated alias for a single TimeTree calendar.
+        public_calendar: Set true to use a public TimeTree id without login.
     """
+    from commontime import resolve_week
+
     tz = ZoneInfo(timezone)
-    code = calendar_code or os.environ.get("TIMETREE_CALENDAR_CODE")
-    if not code:
-        raise ValueError("No calendar: pass calendar_code or set TIMETREE_CALENDAR_CODE.")
+    cals = list(calendars or [])
+    if not cals:
+        if source == "google":
+            env = os.environ.get("GOOGLE_CALENDARS", "")
+            cals = [c.strip() for c in env.split(",") if c.strip()] or ["primary"]
+        else:
+            cals = [calendar_code or os.environ.get("TIMETREE_CALENDAR_CODE")]
+    if not cals or not cals[0]:
+        raise ValueError("No calendar: pass calendars or set TIMETREE_CALENDAR_CODE / GOOGLE_CALENDARS.")
+    cals = [c for c in cals if c]
     days = resolve_week(week_start, tz)
-    tmp = tempfile.NamedTemporaryFile(suffix=".ics", delete=False)
-    tmp.close()
-    try:
-        export_ics(code, tmp.name, public=public_calendar)
-        busy = load_busy(tmp.name, tz, days, _parse_hhmm(day_start), _parse_hhmm(day_end))
-        slots = find_slots(days, busy, tz, _parse_hhmm(day_start), _parse_hhmm(day_end),
-                           duration_min, step_min)
-    finally:
-        Path(tmp.name).unlink(missing_ok=True)
-    return {"week": [d.isoformat() for d in days], "timezone": timezone,
+    ds, de = _parse_hhmm(day_start), _parse_hhmm(day_end)
+    if source == "google":
+        from providers import google_busy
+        busy = google_busy(cals, days, tz, ds, de)
+    else:
+        from commontime import export_ics, load_busy
+        tmp = tempfile.NamedTemporaryFile(suffix=".ics", delete=False)
+        tmp.close()
+        try:
+            export_ics(cals[0], tmp.name, public=public_calendar)
+            busy = load_busy(tmp.name, tz, days, ds, de)
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+    slots = find_slots(days, busy, tz, ds, de, duration_min, step_min)
+    return {"source": source, "calendars": cals,
+            "week": [d.isoformat() for d in days], "timezone": timezone,
             "window": f"{day_start}-{day_end}", "duration_min": duration_min,
             "slots": slots}
 
 
 @mcp.tool()
-def list_calendars() -> list[dict]:
-    """List TimeTree calendars (name + code) visible to the login in env vars."""
+def list_calendars(source: str = "timetree") -> list[dict]:
+    """List calendars (name + id/code) visible to the login in env vars.
+
+    Args:
+        source: 'timetree' or 'google'.
+    """
+    if source == "google":
+        from providers import google_calendars
+        return google_calendars()
     from timetree_exporter.api.auth import login
     from timetree_exporter.api.calendar import TimeTreeCalendar
 
